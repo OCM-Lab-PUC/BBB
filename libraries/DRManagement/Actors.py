@@ -26,4 +26,8 @@ class home:
 	def check():					# Check for updates in loads, contracts and user preferences
 		return True
 
+	def commit():
+		linker.send(load,state)
+		return
+
 
