@@ -7,7 +7,7 @@ class Linker:					# if you dont put 'self', variables would be considered gloab 
 		self.technologies=[]	# list with available technologies
 		self.lastProtocol=None	# last protocol used for communication
 		#self.socket=[]			# list with created sockets
-		self.aux=WiFi()			# from technology module
+		self.WiFi=WiFi()			# from technology module
 
 	def receive(self):
 		return self.aux.receive()

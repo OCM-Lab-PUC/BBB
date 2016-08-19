@@ -20,36 +20,48 @@ class WiFi:
 		self.serverAddress=("", 8001)										# defines port
 		self.server.bind(self.serverAddress)  								# binds sockets to a specified address
 		self.server.listen(self.maxConnections)
-		self.clientList=None												# list of socket,ip. One per ip
+		self.clientList=[]													# list of [socket,ip]. One per ip
 
-	def listen(self):
-
-		while True:
-			
-
+	def listenConnection(self):
 		client, clientAddress = self.server.accept() 						# Blocking function. Waits for connections 
-		clientList.append([client, clientAddress])
+		self.addClient(client,clientAddress[0])					
+		return True
 
+	def closeConnection(self,socket):
+		socket.close()
 
-	def receive(self):
+	def receive(self,socket):														
 		messageLenght =1
 		chunks = []
 		bytesRecd = 0
 		while bytesRecd< messageLenght:
-			chunk = client.recv(min(messageLenght - bytesRecd, 2048))
+			chunk = socket.recv(min(messageLenght - bytesRecd, 2048))
 			if chunk == '':
 				raise RuntimeError("socket connection broken")
 			chunks.append(chunk)
 			bytesRecd = bytesRecd + len(chunk)
 			return ''.join(chunks)
 
-	def send(message, socket):
+	def send(self, message, socket):
+		totalsent = 0
+		while totalsent < len(message):
+			sent = socket.send(message[totalsent:])
+			if sent == 0:
+				raise RuntimeError("socket connection broken")
+			totalsent = totalsent + sent
 
 
 	# Cleans			
+	def addClient(self, socket, ip):
+		notFound=True
+		for aux in self.clientList:
+			if ip==aux[1]:
+				aux[0]=socket
+				notFound=False
+		if notFound:
+			self.clientList.append([socket,ip])
 
-	def addClient():
-		clientList
+
 
 	def printAddress(self):
 		print self.clientAddress
