@@ -26,7 +26,7 @@ class HomeEnergyManagementSystem: # acá se hace la magia
 		#self.carga=Load(12,'ON')
 		#self.carga.setState('OFF')
 
-	def optimize():				# Optimizes and modifies commitmentMatrix
+	def optimize():					# Optimizes and modifies commitmentMatrix
 		pass
 
 	def check():					# Check for updates in loads, contracts and user preferences
