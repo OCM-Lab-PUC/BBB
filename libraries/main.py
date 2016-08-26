@@ -11,15 +11,26 @@
 
 from Communication.linkage import *
 
-link=Linker()
-link.WiFi.listenConnection()
+#link=Linker()
+#link.WiFi.listenConnection_test()
+##print link.WiFi.clientList
+##print link.WiFi.clientList[0][0]#
+#
+#
+#
+
+#aux = link.WiFi.receive(link.WiFi.clientList[0][0])
+#link.WiFi.send(aux,link.WiFi.clientList[0][0])
+#link.WiFi.listenConnection()
 #print link.WiFi.clientList
-#print link.WiFi.clientList[0][0]
-aux = link.WiFi.receive(link.WiFi.clientList[0][0])
-link.WiFi.send(aux,link.WiFi.clientList[0][0])
-link.WiFi.listenConnection()
-print link.WiFi.clientList
-aux = link.WiFi.receive(link.WiFi.clientList[0][0])
-#link.WiFi.send(aux,link.WiFi.clientList[1][0])
-print link.WiFi.clientList
-#link.aux.printAddress()
+#aux = link.WiFi.receive(link.WiFi.clientList[0][0])
+##link.WiFi.send(aux,link.WiFi.clientList[1][0])
+#print link.WiFi.clientList
+##link.aux.printAddress()
+
+
+link=Linker()
+while True:
+	print link.receive()
+
+#link.receive()
