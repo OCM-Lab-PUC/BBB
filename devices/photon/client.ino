@@ -5,7 +5,7 @@
 
 SYSTEM_MODE(SEMI_AUTOMATIC)
 TCPClient client;
-byte dome_IP[4] = {192,168,0,11};
+byte dome_IP[4] = {192,168,0,117};
 int dome_Port = 8001;
 int led = D7;
 // ifconi

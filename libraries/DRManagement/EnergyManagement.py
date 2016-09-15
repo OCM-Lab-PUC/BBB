@@ -50,15 +50,17 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 	# to add:
 	#	-> if id=0 for incoming aggregator connection
 		internalQueue=Queue.Queue()
-		process = threading.Thread(target=self.link.messageProcessing, args=(internalQueue,))
+		process = threading.Thread(target=self.link.processIncomingMessages, args=(internalQueue,))
 		process.daemon=True
+		process.start()
+
 		auxtime = time.time()
 		while True:
-			
-			id, state,power = internalQueue.get()
+			message=internalQueue.get()
+			id, state, power = message['msgId'], message['state'],message['power']
 			#print 'incoming connection from: ',id
 			if id:
-				self.link.send(id,'ON')
+				#self.link.send(id,'ON')
 				if self.loads.has_key(id):
 					self.loads[id].state=state
 					self.loads[id].power=power

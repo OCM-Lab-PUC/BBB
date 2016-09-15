@@ -50,9 +50,9 @@ class Linker:														# if you dont put 'self', variables would be consider
 		while True:
 			for techno,queue in internalQueue.iteritems():
 				message=queue.get()
-				if message:
+				if message:																# filtering null messaged
 					id=self.updateConnections(message['msgId'],message['sourceId'],message['sourceAddress'],techno)
-					outQueue.put(id, message['state'],message['power'])
+					outQueue.put(message)
 					#outQueue.put(id, message['state'],message['power'])
 					print id, message['state'],message['power']
 													# blocks until an item arives.
@@ -136,7 +136,7 @@ class Linker:														# if you dont put 'self', variables would be consider
 			id=self.getId()					
 		elif msgId==2:												# heartbeat
 			if self.connections.has_key(sourceId):					
-				auxdict = self.connections.get(sourceId)			# probably it'll never happens
+				auxdict = self.connections.get(sourceId)			# probably it'll never happens  (?)
 			id=sourceId
 			#auxdict[sourceIdentifier] = sourceAddress
 			#self.connections[sourceId] = auxdict
