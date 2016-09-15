@@ -5,7 +5,7 @@
 
 SYSTEM_MODE(SEMI_AUTOMATIC)
 TCPClient client;
-byte dome_IP[4] = {192,168,0,117};
+byte dome_IP[4] = {192,168,0,11};
 int dome_Port = 8001;
 int led = D7;
 // ifconi
@@ -72,7 +72,7 @@ void loop(){
             //data = data+aux;
         }
         Serial.println(data.c_str());
-        client.stop();
+        //client.stop();
 
     }
 }

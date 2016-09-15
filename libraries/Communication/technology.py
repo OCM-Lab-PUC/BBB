@@ -1,6 +1,4 @@
-import socket
-import ast
-import json
+import socket, select, ast, json,Queue
 #def sendZigBee(self, address,msg):	# address and msg are both strings. Example, address=b'\x00\x13\xA2\x00\x40\xDD\xAA\x83'
 #xbee.send('tx', frame_id='A', dest_addr=b'\xFF\xFE', dest_addr_long=address,msg)
 
@@ -21,12 +19,12 @@ class TCP():
 	def __init__(self):
 		self.server=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# after interrumping this scripts sockets are still open due to a time_wait state. This cancels it
-		self.maxConnections = 5  											
+		self.maxConnections = 10  											
 		self.serverAddress=("", 8001)										# defines address and port for the client
 		self.server.bind(self.serverAddress)  								# binds sockets to a specified (address,port) couple
 		self.server.listen(self.maxConnections)
-		self.clients={}														# dictionary: {'clientIp':socket}
-		self.idenfifier='TCP' 												# identifier of the technology.
+		self.clients={'server':self.server}									# dictionary: {'clientIp':socket}
+		self.identifier='TCP' 												# identifier of the technology.
 		#self.server.setblocking(0);
 		#print socket.getdefaulttimeout()
 	
@@ -44,25 +42,117 @@ class TCP():
 		for client in self.clients.itervalues():
 			client.close()
  
-#	def receiveFixedLength(self):			
-#	# receives a message of fixed length
-#	# timeout not implemented											
-#		messageLenght = 31													# pre settled lenght. Loses rest of message
-#		chunks = []
-#		bytesRecd = 0
-#		clientIp=self.listenConnection()
-#		while bytesRecd< messageLenght:
-#			chunk = self.clients[clientIp].recv(min(messageLenght - bytesRecd, 2048))
-#			if chunk == '':
-#				raise RuntimeError("socket connection broken")
-#			chunks.append(chunk)
-#			bytesRecd = bytesRecd + len(chunk)
-#			# Should add parseing unit here#
+ 	def asycReceive(self,outQueue):
 
-#		message=ast.literal_eval(''.join(chunks))							# convert to dictionary
-#		message['sourceAddress']=clientIp
-#		#message['content']=''.join(chunks)
-#		return message
+ 	# to add:
+ 	#	-> receive message routine.
+ 	#	-> disconection detection.
+ 	#	-> what happens if packages are lost?
+ 		message_queues = {}
+ 		inputs = []
+		outputs = []
+		message_queues = {}
+		while True:
+			#print self.clients.keys()
+			readable, writable, exceptional = select.select(self.clients.values(), outputs, inputs)
+		    #print readable
+		    #if not readable and not writable:
+		    #    print "no connection"
+			for s in readable:
+				if s is self.server:
+
+					#print 'server detectado'
+					connection, connection_address = s.accept()
+					self.clients[connection_address[0]]=connection
+					connection.setblocking(0)
+					#inputs.append(connection)
+					message_queues[connection] = Queue.Queue()
+#message_queues[connection] = []
+				else:
+					data = self.getStream(s)
+					data['sourceAddress']=self.clients.keys()[self.clients.values().index(s)]
+					#print data
+					outQueue.put(data)
+					if data:
+
+					    #print time.time()-aux
+					    #aux=time.time()
+					    #print data
+					    message_queues[s].put(str(data))
+					    #message_queues[s].append(data)
+					    if s not in outputs:
+							outputs.append(s)
+					else:
+						if s in outputs:
+							outputs.remove(s)
+					    #inputs.remove(s)
+						del self.clients[self.clients.keys()[self.clients.values().index(s)]]	#remove s from clients
+					    #print 'closing socket'
+						s.close()
+						del message_queues[s]
+
+			for s in writable:
+				try:
+
+					next_msg = message_queues[s].get_nowait()
+		            #if message_queues[s]: 
+		             #   next_msg = message_queues[s].pop()
+				except Queue.Empty:
+					outputs.remove(s)
+				else:
+					s.send(next_msg)
+
+			for s in exceptional:
+		        #inputs.remove(s)
+				del clients[clients.keys()[clients.values().index(s)]]
+				if s in outputs:
+					outputs.remove(s)
+				s.close()
+				del message_queues[s]
+
+	def getStream(self,connection):
+		dataLenght = 2														 
+		lenghtDataLenght = 2												 
+		lenghtChunks=[]														# buffer for receiving X
+		chunks=[]															# buffer for receiving Y
+		bytesRecd = 0
+		lenghtBytesRecd=0
+		while bytesRecd < dataLenght:										# reads Y
+			while lenghtBytesRecd < lenghtDataLenght:
+				#print "link: receving message"
+				try:
+					chunk=connection.recv(lenghtDataLenght)						# may we should get directly the socket \\
+					#print "link: message receive"
+				except socket.timeout:
+					return None
+				#if chunk == '':											# from listenConnection()
+				#	#print "hola2"
+				#	raise RuntimeError("socket connection broken")
+				#	return None
+				
+				lenghtChunks.append(chunk)
+				lenghtBytesRecd = lenghtBytesRecd + len(chunk)
+				dataLenght=int(''.join(lenghtChunks))
+				#if bytesRecd==messageLenght:
+				#	print chunks
+				#	messageLenght=int(''.join(chunks))
+				#	chunks = []
+				#	bytesRecd=0
+			try:
+				chunk = connection.recv(min(dataLenght - bytesRecd, 2048))
+			except socket.timeout:
+				return None
+
+			#if chunk == '':
+				#print "hola4"
+				#raise RuntimeError("socket connection broken")
+				#return None
+			#print "hola5"
+			chunks.append(chunk)
+			bytesRecd = bytesRecd + len(chunk)
+		return ast.literal_eval(''.join(chunks))								# joins every into one string
+			# Should add parseing unit here
+
 
 	def receive(self,timeOut):			
 	# receives a message of variable length. They are splitted in two parts:

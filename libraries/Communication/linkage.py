@@ -1,7 +1,10 @@
 from technology import *
-from random import randint
-import os						
-import json
+import threading, Queue
+import time
+
+#from random import randint
+#import os						
+#import json
 
 class Linker:														# if you dont put 'self', variables would be considered globals
 # we assume that messages enter/exist in a dictionary formated state
@@ -13,7 +16,7 @@ class Linker:														# if you dont put 'self', variables would be consider
 		#self.lastProtocol=None										# last protocol used for communication
 		#self.socket=[]												# list with created sockets
 		self.TCP=TCP()												# from technology module
-		self.technologies={self.TCP.idenfifier:self.TCP}
+		self.technologies={self.TCP.identifier:self.TCP}
 
 
 	#def addConnection(self,id, addressDict)
@@ -32,12 +35,51 @@ class Linker:														# if you dont put 'self', variables would be consider
 		data=str(data)
 		self.technologies[self.connections[id]['lastTechnology']].send(data,self.connections[id][self.connections[id]['lastTechnology']])
 
+	def processIncomingMessages(self,outQueue):
+
+		internalQueue={}
+		
+		for techno in self.technologies.itervalues():
+			internalQueue[techno.identifier]=Queue.Queue()
+			process = threading.Thread(target=techno.asycReceive, args=(internalQueue[techno.identifier],))
+			process.daemon=True
+			process.start()
+		#while True:
+		#	print 'hola'
+		#	time.sleep(1)
+		while True:
+			for techno,queue in internalQueue.iteritems():
+				message=queue.get()
+				if message:
+					id=self.updateConnections(message['msgId'],message['sourceId'],message['sourceAddress'],techno)
+					outQueue.put(id, message['state'],message['power'])
+					#outQueue.put(id, message['state'],message['power'])
+					print id, message['state'],message['power']
+													# blocks until an item arives.
+
+	def messageProcessing(self):
+
+		#internalQueue={}
+#		
+#		for techno in self.technologies.itervalues():
+#			internalQueue[techno.identifier]=Queue.Queue()
+#			process = threading.Thread(target=techno.asycReceive, args=(internalQueue[techno.identifier],outQueue))
+#			#process.daemon=True
+#			process.start()
+		internalQueue=Queue.Queue()
+		process=threading.Thread(target=self.processIncomingMessages, args=(internalQueue,))
+		process.daemon=True
+		process.start()
+		while True:
+			time.sleep(1)
+
 	def receive(self):
 	# receives alternating between technos.
 	# to add:
 	# 	-> control before calling updateConnections().
 	#	-> integrity of the message loop control.
 	#	-> Just dont like returning three values.
+	
 		for techno in self.technologies.itervalues():
 			message=techno.receive(1)								# 1 seconds
 			if message:

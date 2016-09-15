@@ -1,7 +1,7 @@
 # coding=utf-8
 #from linkage import *
 from Communication.linkage import *
-import time
+import time,Queue
 class Load:
 	def __init__(self, id, state, power,connected):
 		self.state='OFF'										# state of the load, ON OFF
@@ -39,16 +39,23 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 	def update(self):
 		pass
 
+	def main(self):
+		internalQueue=Queue.Queue()
+
+
 
 	def updateLoads(self):							
 	# Check for connected loads
 	# after timeOut seconds, disconects loads
 	# to add:
 	#	-> if id=0 for incoming aggregator connection
+		internalQueue=Queue.Queue()
+		process = threading.Thread(target=self.link.messageProcessing, args=(internalQueue,))
+		process.daemon=True
 		auxtime = time.time()
 		while True:
 			
-			id, state,power = self.link.receive()
+			id, state,power = internalQueue.get()
 			#print 'incoming connection from: ',id
 			if id:
 				self.link.send(id,'ON')

@@ -18,7 +18,7 @@ from DRManagement.EnergyManagement import *
 #
 #
 #
-
+import threading, Queue
 #aux = link.WiFi.receive(link.WiFi.clientList[0][0])
 #link.WiFi.send(aux,link.WiFi.clientList[0][0])
 #link.WiFi.listenConnection()
@@ -28,7 +28,10 @@ from DRManagement.EnergyManagement import *
 #print link.WiFi.clientList
 ##link.aux.printAddress()
 
-#link=Linker();
+#queue=Queue.Queue()
+link=Linker()
+link.messageProcessing()
+#link.messageProcessing()
 #link.receive()
 #time.sleep(1)
 #print "hola"
@@ -36,7 +39,7 @@ from DRManagement.EnergyManagement import *
 #while True:
 #	link.receive()
 
-casa1=HomeEnergyManagementSystem('BBB1')
-casa1.updateLoads()
+#casa1=HomeEnergyManagementSystem('BBB1')
+#casa1.updateLoads()
 
 #link.receive()
