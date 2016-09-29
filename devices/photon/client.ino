@@ -5,7 +5,7 @@
 
 SYSTEM_MODE(SEMI_AUTOMATIC)
 TCPClient client;
-byte dome_IP[4] = {192,168,0,117};
+byte dome_IP[4] = {192,168,0,12};
 int dome_Port = 8001;
 int led = D7;
 // ifconi
@@ -19,7 +19,7 @@ void setup() {
     //WiFi.useDynamicIP();  //persistente muy importante, si se pone dinámica la va a recordar para siempre y ocurren problemas de conexión
     //WiFi.on();
     WiFi.connect();
-    //Particle.connect();
+    //Particle.connect();   // bloqueante. Conneción a la nube
     //waitUntil(WiFi.ready);
     //delay(5000);
 }
@@ -38,10 +38,10 @@ void heartbeat(){
 }
 
 void send(){
-    std::string data="{'msgId':2,'sourceId':4,'power':100,'state':0}";
+    std::string data="{'msgId':1,'sourceId':4,'content':{'power':100,'state':0}}";
     std::stringstream aux;
     aux << data.size();                                                         
-    std::string lenght = aux.str();                                 // important lengt must be 9<lenght<100
+    std::string lenght = aux.str();          // important lengt must be 9<lenght<100
     //Serial.println((lenght+data).c_str());
     client.write((lenght+data).c_str());
     //char *intStr = itoa(lenght);

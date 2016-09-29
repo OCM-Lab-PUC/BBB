@@ -29,8 +29,8 @@ import threading, Queue
 ##link.aux.printAddress()
 
 #queue=Queue.Queue()
-link=Linker()
-link.messageProcessing()
+#link=Linker()
+#link.messageProcessing()
 #link.messageProcessing()
 #link.receive()
 #time.sleep(1)
@@ -39,7 +39,8 @@ link.messageProcessing()
 #while True:
 #	link.receive()
 
-#casa1=HomeEnergyManagementSystem('BBB1')
-#casa1.updateLoads()
+casa1=HomeEnergyManagementSystem('Casa1')
+#casa1.main()
+casa1.checkUpdates()
 
 #link.receive()

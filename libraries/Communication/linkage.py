@@ -23,7 +23,7 @@ class Linker:														# if you dont put 'self', variables would be consider
 	#	connectionList[id]=addressDict
 
 	def send(self, id, state):
-	# sends state to id using the last used techno.
+	# sends state to id using the last used techno for receiving.
 	# error control if message was not send.
 	# to improve:
 	# 	-> alternance between technos
@@ -35,45 +35,50 @@ class Linker:														# if you dont put 'self', variables would be consider
 		data=str(data)
 		self.technologies[self.connections[id]['lastTechnology']].send(data,self.connections[id][self.connections[id]['lastTechnology']])
 
-	def processIncomingMessages(self,outQueue):
-
-		internalQueue={}
+	def processMessages(self,outQueue,inQueue):
+		receptionQueue={}
+		emissionQueue={}
 		
 		for techno in self.technologies.itervalues():
-			internalQueue[techno.identifier]=Queue.Queue()
-			process = threading.Thread(target=techno.asycReceive, args=(internalQueue[techno.identifier],))
+			receptionQueue[techno.identifier]=Queue.Queue()
+			emissionQueue[techno.identifier]=Queue.Queue()
+			process = threading.Thread(target=techno.asycSendReceive, args=(receptionQueue[techno.identifier], emissionQueue[techno.identifier],))
 			process.daemon=True
 			process.start()
-		#while True:
-		#	print 'hola'
-		#	time.sleep(1)
 		while True:
-			for techno,queue in internalQueue.iteritems():
-				message=queue.get()
-				if message:																# filtering null messaged
-					id=self.updateConnections(message['msgId'],message['sourceId'],message['sourceAddress'],techno)
-					outQueue.put(message)
-					#outQueue.put(id, message['state'],message['power'])
-					print id, message['state'],message['power']
-													# blocks until an item arives.
-
-	def messageProcessing(self):
-
-		#internalQueue={}
-#		
-#		for techno in self.technologies.itervalues():
-#			internalQueue[techno.identifier]=Queue.Queue()
-#			process = threading.Thread(target=techno.asycReceive, args=(internalQueue[techno.identifier],outQueue))
-#			#process.daemon=True
-#			process.start()
-		internalQueue=Queue.Queue()
-		process=threading.Thread(target=self.processIncomingMessages, args=(internalQueue,))
-		process.daemon=True
-		process.start()
-		while True:
-			time.sleep(1)
+			# receive
+			for techno,queue in receptionQueue.iteritems():
+				try:
+					internalMessage=queue.get(block=False)			# must be non-blocking to alterne between technos
+				except Queue.Empty:
+					None
+				else:
+					id=self.updateConnections(internalMessage['sourceId'],internalMessage['sourceAddress'],techno)
+					# we create a new message with the fundamental fields to passe to the outQueue
+					incomingMessage={}
+					incomingMessage['sourceId']=id
+					incomingMessage['msgId']=internalMessage['msgId']
+					incomingMessage['content']=internalMessage['content']
+					outQueue.put(incomingMessage)
+			#send
+			try:
+				internalMessage2=inQueue.get(block=False)
+				#print '-- Linker--> sending state %d to load %d' %( outMessage['content']['state'], outMessage['destinationId'])
+			except Queue.Empty:
+					None
+			else:
+				# we create a new message with the fundamental fields to passe it to the emissionQueue
+				destinationId=internalMessage2['destinationId']
+				outgoingMessage={}
+				outgoingMessage['destinationAddress']=self.connections[destinationId][self.connections[destinationId]['lastTechnology']]
+				outgoingMessage['content']=internalMessage2['content']
+				#print outgoingMessage
+				emissionQueue[self.connections[destinationId]['lastTechnology']].put(outgoingMessage)
+				#print '-- Linker--> Last technoloy', self.connections[outMessage['destinationId']]['lastTechnology']
+				#print '-- Linker--> address', self.connections[id][self.connections[id]['lastTechnology']]
 
 	def receive(self):
+	# Deprecated
 	# receives alternating between technos.
 	# to add:
 	# 	-> control before calling updateConnections().
@@ -83,7 +88,7 @@ class Linker:														# if you dont put 'self', variables would be consider
 		for techno in self.technologies.itervalues():
 			message=techno.receive(1)								# 1 seconds
 			if message:
-				id=self.updateConnections(message['msgId'],message['sourceId'],message['sourceAddress'],techno.idenfifier)
+				id=self.updateConnections(message['sourceId'],message['sourceAddress'],techno.idenfifier)
 				#self.send(id,'ON')
 				return id, message['state'],message['power']
 	
@@ -122,7 +127,7 @@ class Linker:														# if you dont put 'self', variables would be consider
 
 
 
-	def updateConnections(self, msgId, sourceId, sourceAddress, sourceIdentifier):
+	def updateConnections(self, sourceId, sourceAddress, sourceIdentifier):
 	# updates connections dictionary. 
 	# returns connection's id.
 	# to improve:
@@ -132,9 +137,9 @@ class Linker:														# if you dont put 'self', variables would be consider
 		#sourceId=int(sourceId)										# deletes 0's in case of...
 		#msgId=int(msgId)											# deletes 0's in case of...
 		auxdict={}
-		if msgId==1:												# id request from client
+		if sourceId==-1:											# id request from client
 			id=self.getId()					
-		elif msgId==2:												# heartbeat
+		elif sourceId>=0:											# heartbeat
 			if self.connections.has_key(sourceId):					
 				auxdict = self.connections.get(sourceId)			# probably it'll never happens  (?)
 			id=sourceId
@@ -152,8 +157,9 @@ class Linker:														# if you dont put 'self', variables would be consider
 	#	return randint(0,100)
 
 	def readConnections(self):
-		# reads list of connections stored in ./connection_data/connections.json
-		# first time it creates both folder and file
+	# Deprecated.
+	# reads list of connections stored in ./connection_data/connections.json
+	# first time it creates both folder and file
 		if not os.path.exists('./connection_data/'):
 			os.makedirs('./connection_data/')
 		file='./connection_data/connections.json'
@@ -169,7 +175,7 @@ class Linker:														# if you dont put 'self', variables would be consider
 				return {}
 
 	def getId(self):
-		# read id_history which has the las assigned id
+	# read id_history which has the las assigned id
 		file='./id_data/id_history.dat'
 		id=0	
 		if not os.path.exists('./id_data/'):
