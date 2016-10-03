@@ -3,7 +3,7 @@ import sys
 import time
 import ast
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-serverAddress = ('localhost', 7001)
+serverAddress = ('localhost', 8001)
 sock.connect(serverAddress)
 #sock.setblocking(0)
 def sendStream(data, connection): 
