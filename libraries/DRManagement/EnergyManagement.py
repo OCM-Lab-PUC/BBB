@@ -1,20 +1,20 @@
 # coding=utf-8
 #from linkage import *
 from Communication.linkage import *
-import time, Queue, random
+import time, Queue, random,threading
 class Load(object):
-	def __init__(self, id, state, power,connected):
-		self.state='OFF'										# state of the load, ON OFF
+	def __init__(self, id, power,connected):
+		self.state=0										# state of the load, ON OFF
 		self.power=power										# power in kW
 		self.connected=connected								# TRUE if connection between home and the load is enabled
 		self.id=id
 		self.commitment=[]
-	def __eq__(self, other): 
-		if not isinstance(other, Load):
-			return False
-		return self.id == other.id
-	def __hash__(self):
-		return 200
+#	def __eq__(self, other): 
+#		if not isinstance(other, Load):
+#			return False
+#		return self.id == other.id
+#	def __hash__(self):
+#		return 200
 
 	def isConnected(self):
 		return connected
@@ -33,13 +33,15 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 	## Initializing step: ID,MAC table
 	##
 	def __init__(self, name):
-		self.loads={}											# dictionary of loads= {'id':load}
+		self.loads={}
+		self.oldLoads=[]											# dictionary of loads= {'id':load}
 		self.contracts=[]										# list with contracts
 		self.prices=[]
 		self.commitmentMatrix=[]								# commitment matrix (load,state,time). Indicates state of load at time
 		self.userPreferences=[]
 		self.name=name
 		self.link=Linker()
+		self.clock=time.time()
 		#self.carga=Load(12,'ON')
 		#self.carga.setState('OFF')
 		
@@ -48,32 +50,76 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 		pass
 
 	def main(self):
-		set1=set()
-		lista1=[]
-		carga1=Load(1,'ON','100',True)
-		carga2=Load(2,'ON','200',True)
-		carga3=Load(3,'ON','200',True)
-		set1.add(carga1)
-		set1.add(carga2)
-		lista1.append(carga1)
-		lista1.append(carga2)
-		#set2.add(carga1)
-		#set2.add(carga3)
-		#print carga1==carga2
-		#print carga1 in set1
+		timeOut=2.5												# seconds.
 
-		print hash(carga3)==hash(carga2)
-		print carga3==carga2
-		print carga3 in {carga2}
-		print carga3 in [carga2]
-		#print hash(carga3)
-		#print hash(carga2)
-		#print carga3==carga2
-		#print carga3 in set1
-		#print carga3 in lista1
-		#carga2.id=100
-		#for item in Lista1&Lista2:
-		#	print item.id
+		runEvent = threading.Event()
+		runEvent.set()
+		receptionQueue=Queue.Queue()
+		emissionQueue=Queue.Queue()
+		process = threading.Thread(target=self.link.processMessages, args=(receptionQueue,emissionQueue,runEvent))
+		#process.daemon=True 									# este ya no es necesario
+		process.start()
+
+		#timer = time.time()
+		#oldLoads=self.loads.keys()
+		while True:
+			try:
+				oldLoads=self.loads.keys()
+				self.checkupdates2(receptionQueue,emissionQueue)
+				self.updateConnectedLoads(oldLoads,timeOut)
+				#self.sendTestAggregator(emissionQueue)
+			except KeyboardInterrupt:
+				# stoping statement
+				print '-- HEMS ---> Stoping Link...'
+				runEvent.clear()
+				process.join()
+				print '-- HEMS ---> Link stoped'
+				break
+
+	def checkupdates2(self,receptionQueue,emissionQueue):
+		try:
+			message=receptionQueue.get(block=False)				# we can add a timeOut here
+		except Queue.Empty:
+			None
+		else:													# runs if no exception is detected
+			id, msgId, content= message['sourceId'], message['msgId'], message['content']
+			if id>0:											# message from lower level
+				if msgId==1:									# heartbeat
+					if self.loads.has_key(id):
+						self.loads[id].state=content['state']
+						self.loads[id].power=content['power']
+						self.loads[id].connected=True
+					else:
+						self.loads[id]=Load(id,content['power'],True)
+					self.commit(id,emissionQueue)				# send back commitment	
+					self.sendTestAggregator(emissionQueue)		# testing sending to aggregator
+			elif id==0:											# message from upper level
+				if msgId==1:									# prices
+					self.updatePrices(content['prices'])
+					self.informAggregator(emissionQueue)
+
+	def updateConnectedLoads(self,oldLoads,timeOut):
+		#print oldLoads
+		if time.time()-self.clock>timeOut:						# remove every timeOut seconds
+			for id in self.loads.keys():
+				if self.loads[id].connected:
+					self.loads[id].connected=False
+				else:	
+					del self.loads[id]
+			# check for changes in connected loads
+			print oldLoads
+			if oldLoads!=self.loads.keys():
+				print '-- HEMS ---> Connection/disconnection detected. Updating commitment...' 
+				self.updateCommitment()
+				#oldLoads=self.loads.keys()
+			self.clock=time.time()
+			print '-- HEMS ---> Connected loads: ',self.loads.keys()
+
+	def sendTestAggregator(self,emissionQueue):
+		print '-- HEMS ---> Sending test message to aggregator'
+		outMesage={'destinationId':0,'content':{'holi':'chau'}}
+		emissionQueue.put(outMesage)
+		
 
 	def informAggregator(self,emissionQueue):
 		outMesage={'destinationId':0,'content':{'prices':str(self.prices)}}
@@ -87,9 +133,10 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 		elif lenght==1440:
 			actualTime=time.localtime().tm_hour*60+time.localtime().tm_min # in minutes
 			state=self.loads[id].commitment[actualTime]
+		print '-- HEMS ---> Sending commmit: load %d, state %d...' % (id,state)
 		outMesage={'destinationId':id,'content':{'state':state}}
 		emissionQueue.put(outMesage)
-		print '-- HEMS ---> Sending commmit: load %d, state %d...' % (id,state)
+		
 
 
 	def updatePrices(self,prices):
@@ -97,9 +144,12 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 
 	def updateCommitment(self):
 		for load in self.loads.itervalues():
+			auxCommitment=[]
 			for i in range(1440):
-				load.commitment.append(random.randrange(0,2))	# random integer 0 or 1
-			#print load.commitment								
+				auxCommitment.append(random.randrange(0,2))				# random integer 0 or 1
+				#load.commitment.append()	
+			#print load.commitment
+			load.commitment=auxCommitment								
 
 
 
@@ -116,52 +166,63 @@ class HomeEnergyManagementSystem: 								# acá se hace la magia
 	#	-> case handling for (if, msgId) tuple
 		timeOut=2.5												# seconds.
 		oldLoads=[]												# list for comparing updates in loads 
+
+		runEvent = threading.Event()
+		runEvent.set()
 		receptionQueue=Queue.Queue()
 		emissionQueue=Queue.Queue()
-		process = threading.Thread(target=self.link.processMessages, args=(receptionQueue,emissionQueue,))
-		process.daemon=True
+		process = threading.Thread(target=self.link.processMessages, args=(receptionQueue,emissionQueue,runEvent))
+		process.daemon=True 									# este ya no es necesario
 		process.start()
 
 		auxtime = time.time()
+
 		while True:
 			try:
-				message=receptionQueue.get(block=False)			# we can add a timeOut here
-			except Queue.Empty:
-				None
-			else:
-				id, msgId, content= message['sourceId'], message['msgId'], message['content']
-				if id>0:										# message from lower level
-					if msgId==1:								# heartbeat
-						if self.loads.has_key(id):
-							self.loads[id].state=content['state']
-							self.loads[id].power=content['power']
-							self.loads[id].connected=True
-						else:
-							self.loads[id]=Load(id,content['state'],content['power'],True)
-						self.commit(id,emissionQueue)			# send back commitment
-				
-				elif id==0:											# message from upper level
-					if msgId==1:								# prices
-						self.updatePrices(content['prices'])
-						self.informAggregator(emissionQueue)
+				try:
+					message=receptionQueue.get(block=False)		# we can add a timeOut here
+				except Queue.Empty:
+					None
+				else:											# runs if no exception is detected
+					id, msgId, content= message['sourceId'], message['msgId'], message['content']
+					if id>0:									# message from lower level
+						if msgId==1:							# heartbeat
+							if self.loads.has_key(id):
+								self.loads[id].state=content['state']
+								self.loads[id].power=content['power']
+								self.loads[id].connected=True
+							else:
+								self.loads[id]=Load(id,content['power'],True)
+							self.commit(id,emissionQueue)		# send back commitment
+					
+					elif id==0:									# message from upper level
+						if msgId==1:							# prices
+							self.updatePrices(content['prices'])
+							self.informAggregator(emissionQueue)
+				finally:										# runs always
+					# clean connected loads
+					if time.time()-auxtime>timeOut:				# remove every timeOut seconds
+						self.sendTestAggregator(emissionQueue)
+						for id in self.loads.keys():
+							if self.loads[id].connected:
+								self.loads[id].connected=False
+							else:	
+								del self.loads[id]
+						# check for changes in connected loads
+						if oldLoads!=self.loads.keys():
+							print '-- HEMS ---> Connection/disconnection detected. Updating commitment...' 
+							self.updateCommitment()
+						oldLoads=self.loads.keys()
+						auxtime=time.time()
+						print '-- HEMS ---> Connected loads: ',self.loads.keys()
 
-
-				#print 'vacia'
-			
-			# clean connected loads
-			if time.time()-auxtime>timeOut:						# remove every timeOut seconds
-				for id in self.loads.keys():
-					if self.loads[id].connected:
-						self.loads[id].connected=False
-					else:	
-						del self.loads[id]
-				# check for changes in connected loads
-				if oldLoads!=self.loads.keys():
-					print '-- HEMS ---> Connection/disconnection detected. Updating commitment...' 
-					self.updateCommitment()
-				oldLoads=self.loads.keys()
-				auxtime=time.time()
-				print '-- HEMS ---> Connected loads: ',self.loads.keys()
+			except KeyboardInterrupt:
+				# stoping statement
+				print '-- HEMS ---> Stoping Link...'
+				runEvent.clear()
+				process.join()
+				print '-- HEMS ---> Link stoped'
+				break
 
 	 
 

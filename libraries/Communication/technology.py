@@ -1,4 +1,7 @@
-import socket, select, ast, Queue, errno,time
+import socket, select, ast, Queue, errno, time
+import sshtunnel
+
+from sshtunnel import SSHTunnelForwarder
 #def sendZigBee(self, address,msg):	# address and msg are both strings. Example, address=b'\x00\x13\xA2\x00\x40\xDD\xAA\x83'
 #xbee.send('tx', frame_id='A', dest_addr=b'\xFF\xFE', dest_addr_long=address,msg)
 
@@ -17,17 +20,40 @@ import socket, select, ast, Queue, errno,time
 class TCP():
 
 	def __init__(self):
+		# local server socket and initialization
 		self.server=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# after interrumping this scripts sockets are still open due to a time_wait state. This cancels it
 		self.maxConnections = 10  											
 		self.serverAddress=("", 8001)										# defines address and port for the client
 		self.server.bind(self.serverAddress)  								# binds sockets to a specified (address,port) couple
 		self.server.listen(self.maxConnections)
+		# remote server tunneling
+		self.tunnel = sshtunnel.SSHTunnelForwarder(
+			('OCM-server.ing.puc.cl',5915),
+    		ssh_username='pigalleg',
+			ssh_password=None,
+			ssh_pkey='/home/pabloncho/.ssh/id_rsa',
+			ssh_private_key_password=None,
+			local_bind_address=('0.0.0.0', 9001),
+			remote_bind_address=('localhost', 10001))
+		# remote server socket 
+		self.remoteServer=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.remoteServerAddress = ('localhost', 9001)
+		
+
 		self.clients={}														# dictionary: {'clientIp':socket}
 		self.identifier='TCP' 												# identifier of the technology.
 		#self.server.setblocking(0);
 		#print socket.getdefaulttimeout()
-	
+
+	def serverConnectionStart(self):
+		print '-- TCP  ---> Initiating shh tunnnel with aggregator...',
+ 		self.tunnel.start()
+ 		print 'done'
+ 		print '-- TCP  ---> Initiating connection with aggregator...',
+ 		self.remoteServer.connect(self.remoteServerAddress)
+ 		#self.clients['localhost']=self.remoteServer
+ 		print 'done'
 	
 	def listenConnection(self):
 	# Deprecated
@@ -41,10 +67,12 @@ class TCP():
 		return client, clientAddress[0]										# return  ip address.
 
 	def closeConnections(self):
+		print '-- TCP  ---> Closing connections...'
+		self.tunnel.stop()
 		for client in self.clients.itervalues():
 			client.close()
  
- 	def asycSendReceive(self,outQueue,inQueue):
+ 	def asycSendReceive(self,outQueue,inQueue,event):
 
  	# to add:
  	#	-> deparse message routine.
@@ -52,58 +80,71 @@ class TCP():
  	#	-> control if get/sendStream fails or blocks
  	#	-> control if s.accept() fails or blocks
  	#	-> meaning of connection.setblocking(0) is not clear
- 	#	-> in linux, if client closes the connections, it arise no key error in data = message_queues[s].get(block=False)
+ 	#	-> in linux, if client closes the connections, it arises no key error in data = message_queues[s].get(block=False)
+ 		self.serverConnectionStart()
  		inputs = []
 		outputs = []
 		message_queues = {}
+		#inputs.append(self.remoteServer)
 		self.clients['server']=self.server
-		
-		while True:
+		self.clients['localhost']=self.remoteServer
+
+		while event.isSet():
+			# try statement controls if no messages are in queue and if the connections is deleted before the sending process 
 			try:
 				outgoingData=inQueue.get(block=False)
-			except Queue.Empty:
-				None
-			else:
+				#print outgoingData['destinationAddress']
 				connection = self.clients[outgoingData['destinationAddress']]
+			except Queue.Empty:
+				#print 'I got a Queue.Empty error - reason "%s"' % str(e)
+				None
+			except KeyError, e:
+				print 'I got a KeyError - reason "%s"' % str(e)
+			except:
+				print 'I got another exception, but I should re-raise'
+				raise
+			else:
 				if connection not in outputs: 
 					outputs.append(connection)
 					message_queues[connection] = Queue.Queue()
 				message_queues[connection].put(str(outgoingData['content']))
 			
 			readable, writable, exceptional = select.select(self.clients.values(), outputs, inputs,0)	# if not 0, it blocks it queues are empty
-			tiempo=time.time()
 			
 			for s in writable:
-				print time.time()-tiempo
-				print "writable "
 				try:
 					data = message_queues[s].get(block=False)
 				except Queue.Empty:
-					print "eliminando output"
 					outputs.remove(s)
+				except:
+					print 'I got another exception, but I should re-raise'
+					raise
 				else:
-					print '-- TCP  ---> sending ', data
-					self.sendStream(data,s)									
-					#s.send(data)
+					self.sendStream(data,s)
+														
 			for s in readable:
-				if s is self.server:
+				if s is self.server:										# enters only when incoming connection
 					connection, connection_address = s.accept()
 					self.clients[connection_address[0]]=connection
 					connection.setblocking(0)
 					inputs.append(connection)
+				elif s is self.remoteServer:
+					#self.remoteServer.connect(self.remoteServerAddress)
+					inputs.append(s)										# not quite sure about this
 				else:
-					print "leyendo buffer"
+					#print "leyendo buffer"
 					incomingData = self.getStream(s)
 					#aux=s.recv(1024)
 					#print aux
 					#incomingData = ast.literal_eval(aux)
 					if incomingData:
-						print "received data"
-						incomingData['sourceAddress']=self.clients.keys()[self.clients.values().index(s)]	# adding addres of the socket
+						#print "received data"
+						incomingData['sourceAddress']=self.clients.keys()[self.clients.values().index(s)]	# adding address of the socket
 						outQueue.put(incomingData)
 					else:
-						print time.time()-tiempo
-						print "no data....eliminando"
+						#print time.time()-tiempo
+						#print "no data....eliminando"
+						#print self.clients.keys()[self.clients.values().index(s)]
 						inputs.remove(s)									# verificar si es necesario un if
 						if s in outputs:
 							outputs.remove(s)
@@ -113,7 +154,7 @@ class TCP():
 							del message_queues[s]
 
 			for s in exceptional:
-				print "exceptional"
+				#print "exceptional"
 				inputs.remove(s)
 				del self.clients[self.clients.keys()[self.clients.values().index(s)]]
 				if s in outputs:
@@ -123,6 +164,10 @@ class TCP():
 					del message_queues[s]
 			#print time.time()-tiempo
 			#print "tiempo entero ",time.time()-tiempoentero
+
+		# closing statement
+		self.closeConnections()
+
 
 	def sendStream(self, data, connection):
 		data=str(len(data))+data 

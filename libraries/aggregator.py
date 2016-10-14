@@ -2,9 +2,20 @@ import socket
 import sys
 import time
 import ast
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-serverAddress = ('localhost', 8001)
-sock.connect(serverAddress)
+import select
+#sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#serverAddress = ('localhost', 9001)
+#sock.connect(serverAddress)
+server=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# after interrumping this scripts sockets are still open due to a time_wait state. This cancels it
+maxConnections = 10  											
+serverAddress=("", 10001)										# defines address and port for the client
+server.bind(serverAddress)  								# binds sockets to a specified (address,port) couple
+server.listen(maxConnections)
+
+
+
+
 #sock.setblocking(0)
 def sendStream(data, connection): 
 	totalsent = 0
@@ -39,29 +50,40 @@ def getStream(connection):
 		return ast.literal_eval(''.join(chunks))								# joins every into one string
 
 
-data="{'msgId':1,'sourceId':0,'content':{'prices':1000}}"
-#print data
-#print len(data)
-if len(data)>100:
- 	raise NameError("lenght could not be greater than 99")
-data=str(len(data))+data
-
-#data=""
-#print data
-#sock.sendall(data)
-#time.sleep(3)
+inputs = []
+outputs = []
+connections=[server]
 while True:
-	tiempo = time.time()
-	sendStream(data,sock)
-	print  getStream(sock)
-	print time.time()-tiempo
-	time.sleep(2)
-#time.sleep(1)
-#sock.close()
+	print "waiting..."
+	readable, writable, exceptional = select.select(connections, outputs,[])
+	for s in readable:
+		if s is server:										# enters when incoming connection
+			print 'incoming connection'
+			connection, connection_address = s.accept()
+			connections.append(connection)
+			connection.setblocking(0)
+			#inputs.append(connection)
+		else:
+			incomingData = getStream(s)
+			if incomingData:
+				print 'incoming data: ',
+				#print "received data"
+				print incomingData
+			else:
+				print 'no incoming data'
+				if s in outputs:
+					outputs.remove(s)
+				connections.remove(s)
+				s.close()
+
+
+#data="{'msgId':1,'sourceId':0,'content':{'prices':1000}}"
+#if len(data)>100:
+# 	raise NameError("lenght could not be greater than 99")
+#data=str(len(data))+data
 #while True:
-#	time.sleep(1)
-#time.sleep(5)
-#sock.close()
-#time.sleep(5)
-#print 'state:', getStream(sock)
-#sock.close()
+#	tiempo = time.time()
+#	sendStream(data,sock)
+#	print  getStream(sock)
+#	print time.time()-tiempo
+#	time.sleep(2)

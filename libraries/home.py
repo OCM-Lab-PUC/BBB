@@ -40,7 +40,7 @@ import threading, Queue
 #	link.receive()
 
 casa1=HomeEnergyManagementSystem('Casa1')
-#casa1.main()
-casa1.checkUpdates()
+casa1.main()
+#casa1.checkUpdates()
 
 #link.receive()

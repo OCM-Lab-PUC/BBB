@@ -11,12 +11,18 @@ class Linker:														# if you dont put 'self', variables would be consider
 #	-> parser/deparser for incoming messages
 #	-> message contructor. 
 	def __init__(self):
-		self.connections={}											# dictionary with: {'id':'#','technologyIdentifier':'address'}
+		self.connections={}											# dictionary with: {'id':'#','technologyIdentifier':'address'} {'id':{'technologyIdentifier1':'address1','technologyIdentifier1':'address1','lastTechnology':technoidentifier}}
 		#self.technologies=[]										# list with available technologies
 		#self.lastProtocol=None										# last protocol used for communication
 		#self.socket=[]												# list with created sockets
 		self.TCP=TCP()												# from technology module
 		self.technologies={self.TCP.identifier:self.TCP}
+
+		# define connection with aggregator (id=0)
+		aux={}
+		aux[self.TCP.identifier] = 'localhost'
+		aux['lastTechnology'] = self.TCP.identifier
+		self.connections[0]=aux
 
 
 	#def addConnection(self,id, addressDict)
@@ -35,17 +41,21 @@ class Linker:														# if you dont put 'self', variables would be consider
 		data=str(data)
 		self.technologies[self.connections[id]['lastTechnology']].send(data,self.connections[id][self.connections[id]['lastTechnology']])
 
-	def processMessages(self,outQueue,inQueue):
+	def processMessages(self,outQueue,inQueue,event):
+		runEvent = threading.Event()
+		runEvent.set()
 		receptionQueue={}
 		emissionQueue={}
-		
+		processes=[]
 		for techno in self.technologies.itervalues():
 			receptionQueue[techno.identifier]=Queue.Queue()
 			emissionQueue[techno.identifier]=Queue.Queue()
-			process = threading.Thread(target=techno.asycSendReceive, args=(receptionQueue[techno.identifier], emissionQueue[techno.identifier],))
-			process.daemon=True
+			process = threading.Thread(target=techno.asycSendReceive, args=(receptionQueue[techno.identifier], emissionQueue[techno.identifier], runEvent))
+			#process.daemon=True
 			process.start()
-		while True:
+			processes.append(process)
+
+		while event.isSet():
 			# receive
 			for techno,queue in receptionQueue.iteritems():
 				try:
@@ -74,8 +84,15 @@ class Linker:														# if you dont put 'self', variables would be consider
 				outgoingMessage['content']=internalMessage2['content']
 				#print outgoingMessage
 				emissionQueue[self.connections[destinationId]['lastTechnology']].put(outgoingMessage)
-				#print '-- Linker--> Last technoloy', self.connections[outMessage['destinationId']]['lastTechnology']
 				#print '-- Linker--> address', self.connections[id][self.connections[id]['lastTechnology']]
+		
+		# stoping statement
+		print '-- Link ---> Stoping technos...' 
+		runEvent.clear()
+		for process in processes:
+			process.join()
+		print '-- Link ---> Technos stoped'
+
 
 	def receive(self):
 	# Deprecated
